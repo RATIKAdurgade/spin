@@ -1,0 +1,50 @@
+===============
+notejamDB
+===============
+
+docker network create -d bridge main-link
+
+mkdir -p /var/lib/mysql
+chmod 777 /var/lib/mysql
+export MYSQL_CONTAINER_NAME=mysql
+export MYSQL_DATABASE=notejam
+export MYSQL_PASSWORD=notejam
+export MYSQL_USER=notejam
+export MYSQL_ROOT_PASSWORD=
+
+docker run \
+    --detach --network main-link \
+    --restart=always \
+    --env MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD} \
+    --env MYSQL_USER=${MYSQL_USER} \
+    --env MYSQL_PASSWORD=${MYSQL_PASSWORD} \
+    --env MYSQL_DATABASE=${MYSQL_DATABASE} \
+    --name ${MYSQL_CONTAINER_NAME} \
+    --privileged=true \
+    --publish 3306:3306 \
+    -v /var/lib/mysql:/var/lib/mysql \
+    mysql:5.7.32
+------------------------------------------------------------------------------------------------
+
+=====
+Jenkins
+=======
+docker network create -d bridge main-link
+
+mkdir -p /data/jenkins
+chmod 1777 /data/jenkins/
+
+docker run -d --network main-link \
+--restart=always \
+ -p 8080:8080 \
+ -v /data/jenkins:/var/jenkins_home \
+ -p 50000:50000 \
+ --name jenkins \
+ --env JAVA_OPTS="-Xms6g -Xmx6g" \
+ jenkins/jenkins:2.222.4-lts-centos7
+
+https://jenkins.opsinfra.org/
+------------------------------------------------------------------------------------------------
+
+
+
