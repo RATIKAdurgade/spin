@@ -1,0 +1,152 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: traefik-ingress
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: traefik-sa
+  namespace: traefik-ingress
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: traefik-cr
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - services
+      - endpoints
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: traefik-crb
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: traefik-cr
+subjects:
+- kind: ServiceAccount
+  name: traefik-sa
+  namespace: traefik-ingress
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: traefik-ingress
+  namespace: traefik-ingress
+  labels:
+    run: traefik-ingress-lb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: traefik-ingress-lb
+  template:
+    metadata:
+      labels:
+        run: traefik-ingress-lb
+        name: traefik-ingress-lb
+    spec:
+      serviceAccountName: traefik-sa
+      terminationGracePeriodSeconds: 60
+      containers:
+      - image: traefik
+        name: traefik-ingress-lb
+        ports:
+        - name: http
+          containerPort: 80
+        - name: admin
+          containerPort: 8080
+        args:
+        - --configfile=/config/traefik.yaml
+        volumeMounts:
+          - mountPath: "/config"
+            name: "config"
+      volumes:
+      - name: config
+        configMap:
+          name: traefik-ingress-cm  
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: traefik-ingress-service
+  namespace: traefik-ingress
+spec:
+  selector:
+    run: traefik-ingress-lb
+  ports:
+    - protocol: TCP
+      port: 80
+      name: web
+    - protocol: TCP
+      port: 8080
+      name: admin
+  type: NodePort
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-web-ui
+  namespace: traefik-ingress
+spec:
+  selector:
+    run: traefik-ingress-lb
+  ports:
+  - name: web
+    port: 80
+    targetPort: 8080
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: traefik-web-ui
+  namespace: traefik-ingress
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        backend:
+          serviceName: traefik-web-ui
+          servicePort: web
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traefik-ingress-cm
+  namespace: traefik-ingress
+data:
+  traefik.yaml: |
+    api:
+      insecure: true
+      dashboard: true
+    entryPoints:
+      http:
+        address: ":80"
+    providers:
+      kubernetesIngress: {}
+    metrics:
+      influxDB:
+        address: "http://influxdb:8086"
+        database: "traefik"
+        protocol: http
+        addEntryPointsLabels: true
+        addServicesLabels: true
